@@ -89,7 +89,7 @@ $(function () {
 
     var counter = 0;
     var finished = false;
-    function spin() {      
+    function spin() {
       if (finished) {
         document.getElementById("spinner").style.display = "none";
         return;
@@ -107,8 +107,9 @@ $(function () {
       url: "/run", data: editor.getValue(), contentType: "text/fsharp",
       type: "POST", dataType: "text"
     }).done(function (data) {
-      finished = true;
       eval("(function(){ " + data + "})()");
+    }).always(function() {
+      finished = true;
     });
   };
 

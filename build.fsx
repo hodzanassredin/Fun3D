@@ -7,6 +7,9 @@
 #r "packages/FSharp.Compiler.Service/lib/net45/FSharp.Compiler.Service.dll"
 #r "packages/Suave/lib/net40/Suave.dll"
 #r "packages/FAKE/tools/FakeLib.dll"
+#r "packages/Logary/lib/net40/Logary.dll"
+#r "packages/Logary.Adapters.Suave/lib/net40/Logary.Adapters.Suave.dll"
+#r "packages/NodaTime/lib/net35-Client/NodaTime.dll"
 #load "paket-files/matthid/Yaaf.FSharp.Scripting/src/source/Yaaf.FSharp.Scripting/YaafFSharpScripting.fs"
 
 open Fake
@@ -52,9 +55,47 @@ let reloadAppServer () =
     currentApp.Value <- app
     traceImportant "New version of app.fsx loaded!" )
 
+module MbLogger =
+        open System
+        let skip = [
+                    "choose";
+                    "merge";
+                    "SingleStateKeeper";
+                    "MailboxStateKeeper";
+                    "AltGet";
+                    "AltAdd"
+                    ]
+        let agent = MailboxProcessor<string * string>.Start(fun inbox ->
+                                let rec loop n =
+                                    async {
+                                            let! who, msg = inbox.Receive();
+                                            if List.exists(fun x -> who.StartsWith(x)) skip then ()
+                                            else printfn "%s %s: %s" (DateTime.Now.ToString()) who msg
+                                            return! loop ()
+                                    }
+                                loop ())
+        ///log string
+        let log who msg = agent.Post(who,msg)
+        /// log formatted string
+        let logf who fmt msg = agent.Post(who,sprintf fmt msg)
+
+open Suave.Logging
+type ConsoleLogger(minLevel) =
+      interface Logger with
+        member x.Log level fLine =
+          if level >= minLevel then
+            let line = fLine ()
+            MbLogger.log line.path line.message
+
 Target "run" (fun _ ->
   let app ctx = currentApp.Value ctx
-  let _, server = startWebServerAsync serverConfig app
+
+
+  let webConfig =
+    { serverConfig with
+        logger   = ConsoleLogger(Logging.LogLevel.Info)
+    }
+  let _, server = startWebServerAsync webConfig app
 
   // Start Suave & open web browser with the site
   reloadAppServer()

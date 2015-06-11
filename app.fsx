@@ -7,6 +7,7 @@ open Microsoft.FSharp.Compiler.Interactive.Shell
 open Microsoft.FSharp.Compiler.Ast
 open System.Text
 open System.IO
+open Suave.Logging
 
 // ------------------------------------------------------------------------------------------------
 // Agent that protects a specified resource
@@ -286,9 +287,12 @@ type JsonTypes = JsonProvider<"""{
 /// a tuple with line, column & source (the first two may be optional)
 let getRequestParams (ctx:HttpContext) =
   use sr = new StreamReader(new MemoryStream(ctx.request.rawForm))
-  let tryAsInt s = match Int32.TryParse s with true, n -> Some n | _ -> None
-  ctx.request.queryParam "line" |> Option.bind tryAsInt,
-  ctx.request.queryParam "col" |> Option.bind tryAsInt,
+  let tryAsInt s =
+    match s with
+    | Choice1Of2 s -> match Int32.TryParse s with true, n -> Some n | _ -> None
+    | Choice2Of2 error -> None
+  ctx.request.queryParam "line" |> tryAsInt,
+  ctx.request.queryParam "col" |> tryAsInt,
   sr.ReadToEnd()
 
 // This script is implicitly inserted before every source code we get
@@ -311,10 +315,14 @@ let serviceHandler (checker:ResourceAgent<_>) (fsi:ResourceAgent<_>) scriptFile 
 
   // Transform F# `source` into JavaScript and return it
   | "/run", (_, _, source) ->
+      Log.info ctx.runtime.logger "run" TraceHeader.empty (sprintf "recieved source %s" source)
       let! jscode = evalFunScript (scriptFile, source) checker |> fsi.Process
+
       match jscode with
-      | Some jscode -> return! ctx |> noCacheSuccess jscode
-      | None -> return! ctx |> RequestErrors.BAD_REQUEST "evaluation failed"
+      | Some jscode -> Log.info ctx.runtime.logger "run" TraceHeader.empty (sprintf "eval to jscode %s" jscode)
+                       return! ctx |> noCacheSuccess jscode
+      | None -> Log.info ctx.runtime.logger "run" TraceHeader.empty "evaluation failed"
+                return! ctx |> RequestErrors.BAD_REQUEST "evaluation failed"
 
   // Share the snippet on www.fssnip.net and return its URL & details
   | "/share", (_, _, json) ->
@@ -358,8 +366,8 @@ let serviceHandler (checker:ResourceAgent<_>) (fsi:ResourceAgent<_>) scriptFile 
       let actualFile = Path.Combine(ctx.runtime.homeDirectory, "web", file)
 
       let mime = Suave.Http.Writers.defaultMimeTypesMap(Path.GetExtension(actualFile))
-      let setMime = 
-        match mime with 
+      let setMime =
+        match mime with
         | None -> fun c -> async { return None }
         | Some mime -> Suave.Http.Writers.setMimeType mime.name
       return! ctx |> ( setMime >>= Successful.ok(File.ReadAllBytes actualFile)) }

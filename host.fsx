@@ -1,5 +1,5 @@
 ﻿// --------------------------------------------------------------------------------------
-// A simple FAKE build script that hosts Suave server and 
+// A simple FAKE build script that hosts Suave server and
 // automatically reloads web part that is defined in 'app.fsx'.
 //
 // This script uses FileSystemWatcher to look for changes in 'app.fsx'. When
@@ -27,7 +27,7 @@ open Microsoft.FSharp.Compiler.Interactive.Shell
 let sbOut = new Text.StringBuilder()
 let sbErr = new Text.StringBuilder()
 
-let fsiSession = 
+let fsiSession =
   let inStream = new StringReader("")
   let outStream = new StringWriter(sbOut)
   let errStream = new StringWriter(sbErr)
@@ -40,7 +40,7 @@ let reportFsiError (e:exn) =
   traceError (sprintf "Message: %s\nError: %s" e.Message (sbErr.ToString().Trim()))
   sbErr.Clear() |> ignore
 
-let reloadScript () = 
+let reloadScript () =
   try
     traceImportant "Reloading app.fsx script..."
     let appFsx = __SOURCE_DIRECTORY__ @@ "app.fsx"
@@ -58,7 +58,7 @@ let reloadScript () =
 let currentApp = ref (fun _ -> async { return None })
 
 let handleWatcherEvents e =
-  reloadScript() |> Option.iter (fun app -> 
+  reloadScript() |> Option.iter (fun app ->
     currentApp.Value <- app
     traceImportant "New version of app.fsx loaded!" )
 
@@ -75,6 +75,7 @@ let watchForChanges () =
 // --------------------------------------------------------------------------------------
 // Suave server that redirects all request to currently loaded version
 // --------------------------------------------------------------------------------------
+
 
 let serverConfig =
   { defaultConfig with
